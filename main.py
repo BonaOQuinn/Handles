@@ -1,46 +1,85 @@
-import cv2 
+import threading
+import time
+
+import cv2
 import mediapipe as mp
-import numpy as np
-from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-model_path = "./pose_landmarker_full.task"
-base_options = mp.tasks.BaseOptions(model_asset_path=model_path)
-PoseLandmarker = mp.tasks.vision.PoseLandmarker
-PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
-PoseLandmarkerResult = mp.tasks.vision.PoseLandmarkerResult
-VisionRunningMode = mp.tasks.vision.RunningMode
+MODEL_PATH = "./pose_landmarker_full.task"
+CAMERA_INDEX = 0
 
-#Create a pose landmarker instance in live stream mode
-def print_result(result: PoseLandmarkerResult, output_image: mp.Image, timestamp_ms: int):
-    print('pose landmarker result: {}'.format(result))
+BaseOptions = mp.tasks.BaseOptions
+PoseLandmarker = vision.PoseLandmarker
+PoseLandmarkerOptions = vision.PoseLandmarkerOptions
+PoseLandmarkerResult = vision.PoseLandmarkerResult
+VisionRunningMode = vision.RunningMode
+PoseConnections = vision.PoseLandmarksConnections.POSE_LANDMARKS
+
+# The result callback runs on a MediaPipe thread, so share the latest result via a lock.
+latest_result = None
+result_lock = threading.Lock()
+
+
+def on_result(result: PoseLandmarkerResult, output_image: mp.Image, timestamp_ms: int):
+    global latest_result
+    with result_lock:
+        latest_result = result
+
+
+def draw_pose(frame, result):
+    """Draw landmarks and skeleton connections for every detected pose."""
+    if result is None:
+        return
+    h, w = frame.shape[:2]
+    for landmarks in result.pose_landmarks:
+        points = [(int(lm.x * w), int(lm.y * h)) for lm in landmarks]
+        for conn in PoseConnections:
+            cv2.line(frame, points[conn.start], points[conn.end], (0, 255, 0), 2)
+        for p in points:
+            cv2.circle(frame, p, 4, (0, 0, 255), -1)
+
 
 options = PoseLandmarkerOptions(
-    base_options=base_options,
+    base_options=BaseOptions(model_asset_path=MODEL_PATH),
     running_mode=VisionRunningMode.LIVE_STREAM,
-    result_callback=print_result)
+    num_poses=1,
+    result_callback=on_result,
+)
 
-#opencv2 video capture
-camera_index = 0
-cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
+if not cap.isOpened():
+    print("error: could not open camera")
+    raise SystemExit(1)
+print("camera feed opened successfully, press 'q' to quit")
 
-if not cap.isOpened(): 
-    print(f"error: could not open")
-    exit()
+start = time.monotonic()
+last_ts = -1
 
-print("camera feed opened successfully")
+with PoseLandmarker.create_from_options(options) as landmarker:
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("error: can't receive frame")
+            break
 
-while True: 
-    ret, frame = cap.read()
+        # MediaPipe expects RGB; OpenCV gives BGR.
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-    if not ret: 
-        print("Error: cant recieve frame")
-        break
+        # Timestamps must be strictly increasing.
+        ts = int((time.monotonic() - start) * 1000)
+        if ts <= last_ts:
+            ts = last_ts + 1
+        last_ts = ts
+        landmarker.detect_async(mp_image, ts)
 
-    cv2.imshow('webcam feed', frame)
+        with result_lock:
+            result = latest_result
+        draw_pose(frame, result)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        cv2.imshow("webcam feed", frame)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
 
 cap.release()
 cv2.destroyAllWindows()
