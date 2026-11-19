@@ -8,6 +8,8 @@ Keys
   space      play / pause (plays at ~1/4 speed)
   1 bottom   2 blur   4 edge   5 second_ball
   6 body_occluded (ball hidden by the player's body or another object)
+  7 out_of_frame  (ball fully out of view: a negative example, label with NO box;
+                   mark only 1-2 per video, ideally with something ball-like in view)
                                     (the number keys mark the current frame)
   u          undo the last mark on this video
   n          next video          x   quit
@@ -25,7 +27,7 @@ from pathlib import Path
 import cv2
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v"}
-REASONS = {ord("1"): "bottom", ord("2"): "blur", ord("4"): "edge", ord("5"): "second_ball", ord("6"): "body_occluded"}
+REASONS = {ord("1"): "bottom", ord("2"): "blur", ord("4"): "edge", ord("5"): "second_ball", ord("6"): "body_occluded", ord("7"): "out_of_frame"}
 VIEW_HEIGHT = 900
 
 
@@ -66,7 +68,7 @@ def show(frame, idx, total, fps, video, marks_here):
     here = [r for f, r in marks_here if f == idx]
     lines = [
         f"{video}  frame {idx}/{total - 1}  t={idx / fps:.2f}s  marks: {len(marks_here)}",
-        "MARKED: " + ", ".join(here) if here else "d/a step  j/l x10  space play  1 bottom 2 blur 4 edge 5 2nd ball 6 body  u undo  n next  x quit",
+        "MARKED: " + ", ".join(here) if here else "d/a step  j/l x10  space play  1 bottom 2 blur 4 edge 5 2nd ball 6 body 7 no ball  u undo  n next  x quit",
     ]
     for i, text in enumerate(lines):
         color = (0, 255, 0) if here and i == 1 else (255, 255, 255)
