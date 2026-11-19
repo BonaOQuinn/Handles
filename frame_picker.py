@@ -6,7 +6,7 @@ Marks are saved after every keypress, so closing the window never loses work.
 Keys
   d / a      next / previous frame            l / j    forward / back 10 frames
   space      play / pause (plays at ~1/4 speed)
-  1 bottom   2 blur   3 occluded (hands)   4 edge   5 second_ball
+  1 bottom   2 blur   4 edge   5 second_ball
   6 body_occluded (ball hidden by the player's body or another object)
                                     (the number keys mark the current frame)
   u          undo the last mark on this video
@@ -25,7 +25,7 @@ from pathlib import Path
 import cv2
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v"}
-REASONS = {ord("1"): "bottom", ord("2"): "blur", ord("3"): "occluded", ord("4"): "edge", ord("5"): "second_ball", ord("6"): "body_occluded"}
+REASONS = {ord("1"): "bottom", ord("2"): "blur", ord("4"): "edge", ord("5"): "second_ball", ord("6"): "body_occluded"}
 VIEW_HEIGHT = 900
 
 
@@ -66,7 +66,7 @@ def show(frame, idx, total, fps, video, marks_here):
     here = [r for f, r in marks_here if f == idx]
     lines = [
         f"{video}  frame {idx}/{total - 1}  t={idx / fps:.2f}s  marks: {len(marks_here)}",
-        "MARKED: " + ", ".join(here) if here else "d/a step  j/l x10  space play  1 bottom 2 blur 3 hands 4 edge 5 2nd ball 6 body  u undo  n next  x quit",
+        "MARKED: " + ", ".join(here) if here else "d/a step  j/l x10  space play  1 bottom 2 blur 4 edge 5 2nd ball 6 body  u undo  n next  x quit",
     ]
     for i, text in enumerate(lines):
         color = (0, 255, 0) if here and i == 1 else (255, 255, 255)
