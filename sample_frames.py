@@ -22,7 +22,12 @@ import cv2
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v"}
 SPLITS = ["train", "val", "test"]
-MIN_SPACING = 4  # drop extra frames closer than this to an already-chosen frame
+EXTRA_SPACING = 2  # two targeted frames closer than this collapse into one
+
+
+def clean_stem(stem):
+    """'Copy of IMG_05' -> 'IMG_05': strip the Drive copy prefix and replace spaces."""
+    return stem.removeprefix("Copy of ").strip().replace(" ", "_")
 
 
 def load_extra(path):
@@ -31,19 +36,27 @@ def load_extra(path):
         return extra
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
-            key = Path(row["video"]).stem
+            key = clean_stem(Path(row["video"]).stem)
             extra.setdefault(key, []).append((int(row["frame"]), row["reason"].strip() or "extra"))
     return extra
 
 
 def choose_frames(total, every, extras):
-    """Return {frame_index: reason}. Base frames win; extras too close to a chosen frame are dropped."""
+    """Return {frame_index: reason}.
+
+    Base frames are every Nth frame. A targeted frame is always kept, because the
+    frame you picked is the point. If it is also a base frame it just takes your
+    reason tag. Targeted frames closer than EXTRA_SPACING to another targeted
+    frame collapse into one.
+    """
     chosen = {i: "base" for i in range(0, total, every)}
+    picked = []
     for frame, reason in sorted(extras):
-        if frame in chosen or frame >= total:
+        if frame >= total:
             continue
-        if any(abs(frame - c) < MIN_SPACING for c in chosen):
+        if any(abs(frame - p) < EXTRA_SPACING for p in picked):
             continue
+        picked.append(frame)
         chosen[frame] = reason
     return chosen
 
@@ -80,7 +93,8 @@ def main():
         for v in vids:
             cap = cv2.VideoCapture(str(v))
             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            extras = [] if split == "test" else extra.get(v.stem, [])
+            vid = clean_stem(v.stem)
+            extras = [] if split == "test" else extra.get(vid, [])
             chosen = choose_frames(total, args.every, extras)
             saved = 0
             for idx in range(total):
@@ -89,13 +103,13 @@ def main():
                     break
                 if idx not in chosen:
                     continue
-                name = f"{v.stem}_f{idx:06d}.jpg"
+                name = f"{vid}_f{idx:06d}.jpg"
                 cv2.imwrite(
                     str(out / split / name),
                     resize(frame, args.max_side),
                     [cv2.IMWRITE_JPEG_QUALITY, args.quality],
                 )
-                manifest.append([v.name, split, idx, chosen[idx], f"{split}/{name}"])
+                manifest.append([vid + v.suffix, split, idx, chosen[idx], f"{split}/{name}"])
                 saved += 1
             cap.release()
             print(f"{split}/{v.name}: {saved} frames (of {total})")
@@ -132,11 +146,11 @@ def print_summary(manifest, meta_path):
         return
     # meta CSV: video,<any attribute columns, e.g. player,setting,lighting,ball,move>
     with open(meta_path, newline="") as f:
-        meta = {Path(row["video"]).stem: row for row in csv.DictReader(f)}
+        meta = {clean_stem(Path(row["video"]).stem): row for row in csv.DictReader(f)}
     attrs = [c for c in next(iter(meta.values())).keys() if c != "video"] if meta else []
     total = max(len(manifest), 1)
     for attr in attrs:
-        counts = Counter(meta.get(Path(r[0]).stem, {}).get(attr, "(missing)") for r in manifest)
+        counts = Counter(meta.get(clean_stem(Path(r[0]).stem), {}).get(attr, "(missing)") for r in manifest)
         print(f"\nFrames per {attr}:")
         for value, n in counts.most_common():
             flag = "  <-- under 15%" if n / total < 0.15 and value != "(missing)" else ""
