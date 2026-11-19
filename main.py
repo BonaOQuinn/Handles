@@ -30,13 +30,13 @@ def draw_pose(frame, result):
     """Draw landmarks and skeleton connections for every detected pose."""
     if result is None:
         return
-    h, w = frame.shape[:2]
-    for landmarks in result.pose_landmarks:
-        points = [(int(lm.x * w), int(lm.y * h)) for lm in landmarks]
-        for conn in PoseConnections:
-            cv2.line(frame, points[conn.start], points[conn.end], (0, 255, 0), 2)
+    h, w = frame.shape[:2] # frame is a numpy array (h,w,c) => slicing [:2] returns h, w
+    for landmarks in result.pose_landmarks: # results.pose_landmarks is an entry of a list of 33 landmarks per person
+        points = [(int(lm.x * w), int(lm.y * h)) for lm in landmarks] # normalized landmarks are multiplied by w / h to convert into pixel coordinates
+        for conn in PoseConnections: #list of landmark index pairs that form the skeleton, cv2.line draws line from start to end
+            cv2.line(frame, points[conn.start], points[conn.end], (255, 255, 0), 2)
         for p in points:
-            cv2.circle(frame, p, 4, (0, 0, 255), -1)
+            cv2.circle(frame, p, 6, (0, 0, 255), -1)
 
 
 options = PoseLandmarkerOptions(
@@ -76,6 +76,8 @@ with PoseLandmarker.create_from_options(options) as landmarker:
         with result_lock:
             result = latest_result
         draw_pose(frame, result)
+        #draw pose modifies the frame and returns nothing, that is why it
+        #is called before displaying the frame
 
         cv2.imshow("webcam feed", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
