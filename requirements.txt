@@ -1,0 +1,9 @@
+# Dependencies for the frame-marking and sampling scripts:
+#   frame_picker.py, sample_frames.py, select_subset.py
+opencv-python>=4.8
+
+# Optional: only needed to run the model scripts (ball_benchmark.py, label pre-filling).
+# These pull in PyTorch, so skip them if you are only marking frames.
+# ultralytics
+# lap
+# mediapipe   # only for main.py (pose webcam demo)
